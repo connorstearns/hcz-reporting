@@ -71,39 +71,60 @@ def to_snake_case(name: str) -> str:
         .replace(" ", "_")
     )
 
-
-def safe_divide(numerator: pd.Series | float, denominator: pd.Series | float) -> pd.Series | float:
-    """Safely divide two values and return 0 where denominator is 0/null."""
-    if isinstance(numerator, (int, float, np.floating)) and isinstance(
-        denominator, (int, float, np.floating)
-    ):
-        if denominator in (0, 0.0) or pd.isna(denominator):
-            return 0.0
-        return float(numerator) / float(denominator)
-
-    n = pd.Series(numerator)
-    d = pd.Series(denominator)
-    return np.where((d == 0) | (d.isna()), 0.0, n / d)
+def is_valid_number(value):
+    try:
+        if value is None:
+            return False
+        if pd.isna(value):
+            return False
+        value = float(value)
+        return math.isfinite(value)
+    except Exception:
+        return False
 
 
-def fmt_int(value: float | int) -> str:
-    """Format integer-like KPI values with commas."""
-    return f"{int(round(value, 0)):,}"
+def safe_divide(numerator, denominator):
+    try:
+        if not is_valid_number(numerator) or not is_valid_number(denominator):
+            return None
+        numerator = float(numerator)
+        denominator = float(denominator)
+        if denominator == 0:
+            return None
+        result = numerator / denominator
+        return result if math.isfinite(result) else None
+    except Exception:
+        return None
 
 
-def fmt_currency(value: float | int) -> str:
-    """Format currency KPI values with dollar sign."""
-    return f"${value:,.0f}"
+def fmt_int(value):
+    if not is_valid_number(value):
+        return "—"
+    return f"{int(round(float(value), 0)):,}"
 
 
-def fmt_currency_2(value: float | int) -> str:
-    """Format currency values with 2 decimal places."""
-    return f"${value:,.2f}"
+def fmt_currency(value, decimals=0):
+    if not is_valid_number(value):
+        return "—"
+    return f"${float(value):,.{decimals}f}"
 
 
-def fmt_pct(value: float | int) -> str:
-    """Format percentage values with one decimal place."""
-    return f"{value * 100:,.1f}%"
+def fmt_currency_2(value):
+    if not is_valid_number(value):
+        return "—"
+    return f"${float(value):,.2f}"
+
+
+def fmt_pct(value):
+    if not is_valid_number(value):
+        return "—"
+    return f"{float(value) * 100:,.1f}%"
+
+
+def fmt_number(value, decimals=0):
+    if not is_valid_number(value):
+        return "—"
+    return f"{float(value):,.{decimals}f}"
 
 
 def ensure_datetime(df: pd.DataFrame, col: str) -> pd.DataFrame:
