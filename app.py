@@ -11,7 +11,6 @@ This app reads "HCZ - Master Data File.xlsx" and renders six dashboard sections:
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -73,76 +72,38 @@ def to_snake_case(name: str) -> str:
     )
 
 
-def is_valid_number(value: Any) -> bool:
-    """Return True when value is a finite numeric scalar."""
-    try:
-        if isinstance(value, (pd.Series, np.ndarray, list, tuple, dict)):
-            return False
-        if value is None or pd.isna(value):
-            return False
-        numeric = float(value)
-        return math.isfinite(numeric)
-    except Exception:
-        return False
+def safe_divide(numerator: pd.Series | float, denominator: pd.Series | float) -> pd.Series | float:
+    """Safely divide two values and return 0 where denominator is 0/null."""
+    if isinstance(numerator, (int, float, np.floating)) and isinstance(
+        denominator, (int, float, np.floating)
+    ):
+        if denominator in (0, 0.0) or pd.isna(denominator):
+            return 0.0
+        return float(numerator) / float(denominator)
+
+    n = pd.Series(numerator)
+    d = pd.Series(denominator)
+    return np.where((d == 0) | (d.isna()), 0.0, n / d)
 
 
-def safe_divide(numerator: Any, denominator: Any) -> Optional[float]:
-    """Safely divide scalar values. Returns None on invalid input."""
-    try:
-        if not is_valid_number(numerator) or not is_valid_number(denominator):
-            return None
-        n = float(numerator)
-        d = float(denominator)
-        if d == 0:
-            return None
-        result = n / d
-        return result if math.isfinite(result) else None
-    except Exception:
-        return None
-
-
-def safe_divide_series(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
-    """Vectorized safe divide for dataframe transformations. Invalid results become NaN."""
-    n = pd.to_numeric(numerator, errors="coerce")
-    d = pd.to_numeric(denominator, errors="coerce")
-    out = pd.Series(np.nan, index=n.index, dtype="float64")
-    valid = d.notna() & (d != 0) & n.notna()
-    out.loc[valid] = n.loc[valid] / d.loc[valid]
-    out[~np.isfinite(out)] = np.nan
-    return out
-
-
-def fmt_number(value: Any, decimals: int = 0) -> str:
-    """Format numeric values safely, returning em dash for invalid inputs."""
-    if not is_valid_number(value):
-        return "—"
-    return f"{float(value):,.{decimals}f}"
-
-
-def fmt_int(value: Any) -> str:
+def fmt_int(value: float | int) -> str:
     """Format integer-like KPI values with commas."""
-    if not is_valid_number(value):
-        return "—"
-    return f"{int(round(float(value), 0)):,}"
+    return f"{int(round(value, 0)):,}"
 
 
-def fmt_currency(value: Any, decimals: int = 0) -> str:
-    """Format currency KPI values safely."""
-    if not is_valid_number(value):
-        return "—"
-    return f"${float(value):,.{decimals}f}"
+def fmt_currency(value: float | int) -> str:
+    """Format currency KPI values with dollar sign."""
+    return f"${value:,.0f}"
 
 
-def fmt_currency_2(value: Any) -> str:
+def fmt_currency_2(value: float | int) -> str:
     """Format currency values with 2 decimal places."""
-    return fmt_currency(value, decimals=2)
+    return f"${value:,.2f}"
 
 
-def fmt_pct(value: Any) -> str:
-    """Format percentage values safely with one decimal place."""
-    if not is_valid_number(value):
-        return "—"
-    return f"{float(value) * 100:,.1f}%"
+def fmt_pct(value: float | int) -> str:
+    """Format percentage values with one decimal place."""
+    return f"{value * 100:,.1f}%"
 
 
 def ensure_datetime(df: pd.DataFrame, col: str) -> pd.DataFrame:
@@ -336,11 +297,11 @@ def clean_campaign_data(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     df = parse_month_for_sorting(df, "month")
-    df["ctr"] = safe_divide_series(df["clicks"], df["impressions"])
-    df["cpc"] = safe_divide_series(df["cost"], df["clicks"])
-    df["cpm"] = safe_divide_series(df["cost"], df["impressions"]) * 1000
-    df["cost_per_application"] = safe_divide_series(df["cost"], df["applications"])
-    df["cost_per_career_click"] = safe_divide_series(df["cost"], df["career_clicks"])
+    df["ctr"] = safe_divide(df["clicks"], df["impressions"])
+    df["cpc"] = safe_divide(df["cost"], df["clicks"])
+    df["cpm"] = safe_divide(df["cost"], df["impressions"]) * 1000
+    df["cost_per_application"] = safe_divide(df["cost"], df["applications"])
+    df["cost_per_career_click"] = safe_divide(df["cost"], df["career_clicks"])
 
     return df
 
@@ -366,10 +327,10 @@ def clean_ga4_data(df: pd.DataFrame) -> pd.DataFrame:
     df = normalize_categorical(df, ["month"])
 
     df = parse_month_for_sorting(df, "month")
-    df["application_rate_from_paid_traffic"] = safe_divide_series(
+    df["application_rate_from_paid_traffic"] = safe_divide(
         df["applications_submitted"], df["paid_traffic"]
     )
-    df["career_click_rate_from_paid_traffic"] = safe_divide_series(
+    df["career_click_rate_from_paid_traffic"] = safe_divide(
         df["career_clicks"], df["paid_traffic"]
     )
     return df
@@ -399,8 +360,8 @@ def clean_lp_data(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     df = parse_month_for_sorting(df, "month")
-    df["engagement_rate"] = safe_divide_series(df["engaged_sessions"], df["sessions"])
-    df["views_per_session"] = safe_divide_series(df["views"], df["sessions"])
+    df["engagement_rate"] = safe_divide(df["engaged_sessions"], df["sessions"])
+    df["views_per_session"] = safe_divide(df["views"], df["sessions"])
     return df
 
 
@@ -535,7 +496,7 @@ def get_weighted_ctr_campaign(df: pd.DataFrame, min_impressions: int = 1000) -> 
     grouped = (
         df.groupby("campaign_name", as_index=False)[["clicks", "impressions"]]
         .sum()
-        .assign(ctr=lambda d: safe_divide_series(d["clicks"], d["impressions"]))
+        .assign(ctr=lambda d: safe_divide(d["clicks"], d["impressions"]))
     )
     grouped = grouped[grouped["impressions"] >= min_impressions]
     if grouped.empty:
@@ -553,7 +514,7 @@ def get_best_cpa_campaign(df: pd.DataFrame, min_apps: int = 3) -> Optional[Tuple
     grouped = (
         df.groupby("campaign_name", as_index=False)[["cost", "applications"]]
         .sum()
-        .assign(cost_per_application=lambda d: safe_divide_series(d["cost"], d["applications"]))
+        .assign(cost_per_application=lambda d: safe_divide(d["cost"], d["applications"]))
     )
     grouped = grouped[grouped["applications"] >= min_apps]
     if grouped.empty:
@@ -837,7 +798,7 @@ def render_paid_media_page(campaign_df: pd.DataFrame, start_date: pd.Timestamp, 
             campaign_df.groupby("campaign_name", as_index=False)[["cost", "applications"]]
             .sum()
             .query("applications >= 3")
-            .assign(cost_per_application=lambda d: safe_divide_series(d["cost"], d["applications"]))
+            .assign(cost_per_application=lambda d: safe_divide(d["cost"], d["applications"]))
             .sort_values("cost_per_application", ascending=True)
             .head(15)
         )
@@ -853,11 +814,9 @@ def render_paid_media_page(campaign_df: pd.DataFrame, start_date: pd.Timestamp, 
     if platform_compare.empty:
         empty_state("No Meta/Google rows in current filter context.")
     else:
-        platform_compare["ctr"] = safe_divide_series(
-            platform_compare["clicks"], platform_compare["impressions"]
-        )
-        platform_compare["cpc"] = safe_divide_series(platform_compare["cost"], platform_compare["clicks"])
-        platform_compare["cost_per_application"] = safe_divide_series(
+        platform_compare["ctr"] = safe_divide(platform_compare["clicks"], platform_compare["impressions"])
+        platform_compare["cpc"] = safe_divide(platform_compare["cost"], platform_compare["clicks"])
+        platform_compare["cost_per_application"] = safe_divide(
             platform_compare["cost"], platform_compare["applications"]
         )
         st.dataframe(platform_compare, use_container_width=True)
@@ -1011,7 +970,7 @@ def render_lp_page(lp_df: pd.DataFrame) -> None:
         ("Engaged Sessions", fmt_int(engaged), None),
         ("Engagement Rate", fmt_pct(safe_divide(engaged, sessions)), None),
         ("Views", fmt_int(views), None),
-        ("Views per Session", fmt_number(safe_divide(views, sessions), decimals=2), None),
+        ("Views per Session", f"{safe_divide(views, sessions):.2f}", None),
         ("Career Clicks", fmt_int(career), None),
         ("Enrollment Form Submits", fmt_int(enroll), None),
     ]
@@ -1046,7 +1005,7 @@ def render_lp_page(lp_df: pd.DataFrame) -> None:
         engage_by_device = (
             lp_df.groupby("device", as_index=False)[["engaged_sessions", "sessions"]]
             .sum()
-            .assign(engagement_rate=lambda d: safe_divide_series(d["engaged_sessions"], d["sessions"]))
+            .assign(engagement_rate=lambda d: safe_divide(d["engaged_sessions"], d["sessions"]))
             .sort_values("engagement_rate", ascending=False)
         )
         fig = px.bar(engage_by_device, x="device", y="engagement_rate", title="Engagement Rate by Device", color_discrete_sequence=[COLOR_GREEN])
@@ -1084,7 +1043,7 @@ def render_lp_page(lp_df: pd.DataFrame) -> None:
         device_summary = (
             lp_df.groupby("device", as_index=False)[["sessions", "engaged_sessions", "career_clicks", "enrollment_form_submits"]]
             .sum()
-            .assign(engagement_rate=lambda d: safe_divide_series(d["engaged_sessions"], d["sessions"]))
+            .assign(engagement_rate=lambda d: safe_divide(d["engaged_sessions"], d["sessions"]))
             .sort_values("sessions", ascending=False)
         )
         st.markdown("**Device Performance Summary**")
@@ -1157,8 +1116,8 @@ def render_drilldown_page(campaign_df: pd.DataFrame) -> None:
         subset.groupby("ad_name", as_index=False)[["cost", "impressions", "clicks", "applications"]]
         .sum()
         .assign(
-            ctr=lambda d: safe_divide_series(d["clicks"], d["impressions"]),
-            cost_per_application=lambda d: safe_divide_series(d["cost"], d["applications"]),
+            ctr=lambda d: safe_divide(d["clicks"], d["impressions"]),
+            cost_per_application=lambda d: safe_divide(d["cost"], d["applications"]),
         )
         .sort_values("applications", ascending=False)
     )
@@ -1168,7 +1127,7 @@ def render_drilldown_page(campaign_df: pd.DataFrame) -> None:
     topic_tbl = (
         subset.groupby("ad_topic", as_index=False)[["cost", "clicks", "applications"]]
         .sum()
-        .assign(cost_per_application=lambda d: safe_divide_series(d["cost"], d["applications"]))
+        .assign(cost_per_application=lambda d: safe_divide(d["cost"], d["applications"]))
         .sort_values("applications", ascending=False)
     )
     st.dataframe(topic_tbl, use_container_width=True)
