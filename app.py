@@ -19,6 +19,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 
+
 # -----------------------------
 # App configuration
 # -----------------------------
@@ -245,10 +246,16 @@ def google_sheet_csv_url(spreadsheet_id: str, gid: str) -> str:
     return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={gid}"
 
 
+import gspread
+
+
 def load_from_google_sheets() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    campaign_df = pd.read_csv(google_sheet_csv_url(SPREADSHEET_ID, GID_CAMPAIGN))
-    ga4_df = pd.read_csv(google_sheet_csv_url(SPREADSHEET_ID, GID_GA4))
-    lp_df = pd.read_csv(google_sheet_csv_url(SPREADSHEET_ID, GID_LP))
+    gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
+    sh = gc.open_by_key("1VRGGDN934VPrY-sX55fkPySZ9TKHccqqxGUScpwbWDU")
+
+    campaign_df = pd.DataFrame(sh.worksheet("Campaign Master Feed").get_all_records())
+    ga4_df = pd.DataFrame(sh.worksheet("GA4 Master Feed").get_all_records())
+    lp_df = pd.DataFrame(sh.worksheet("LP Master Feed (Weekly)").get_all_records())
 
     data_quality_df = pd.DataFrame(
         [
@@ -256,19 +263,19 @@ def load_from_google_sheets() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame,
                 "source": SHEET_CAMPAIGN,
                 "last_refresh": pd.Timestamp.today().normalize(),
                 "row_count": len(campaign_df),
-                "note": "live google sheet",
+                "note": "live google sheet via gspread",
             },
             {
                 "source": SHEET_GA4,
                 "last_refresh": pd.Timestamp.today().normalize(),
                 "row_count": len(ga4_df),
-                "note": "live google sheet",
+                "note": "live google sheet via gspread",
             },
             {
                 "source": SHEET_LP,
                 "last_refresh": pd.Timestamp.today().normalize(),
                 "row_count": len(lp_df),
-                "note": "live google sheet",
+                "note": "live google sheet via gspread",
             },
         ]
     )
@@ -312,7 +319,6 @@ def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
 
 
 campaign_df, ga4_df, lp_df, data_quality_df = load_data()
-
 # -----------------------------
 # Sidebar filters
 # -----------------------------
