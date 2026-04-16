@@ -11,6 +11,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+if isinstance(default_end, datetime):
+    default_end = default_end.date()
+if isinstance(max_date, datetime):
+    max_date = max_date.date()
+
+default_end = min(default_end, max_date)
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
@@ -412,7 +418,7 @@ max_date = max(
 ).date()
 
 default_start = max_date - pd.Timedelta(weeks=12)
-default_start = max(default_start.date(), min_date)
+default_start = max(default_start, min_date)
 
 st.sidebar.title("HCZ Dashboard Filters")
 date_range = st.sidebar.date_input(
