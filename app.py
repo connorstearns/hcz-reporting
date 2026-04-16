@@ -232,88 +232,6 @@ def get_prior_period(df: pd.DataFrame, date_col: str, start_date: pd.Timestamp, 
     prior_start = prior_end - pd.Timedelta(days=days - 1)
     return df[df[date_col].between(prior_start, prior_end)]
 
-def get_date_preset_range(preset: str, min_date: date, max_date: date) -> tuple[date, date]:
-    today = max_date
-
-    if preset == "Last 12 Weeks":
-        start = today - timedelta(weeks=12)
-        end = today
-
-    elif preset == "This Week":
-        start = today - timedelta(days=today.weekday())   # Monday
-        end = today
-
-    elif preset == "Last Week":
-        this_week_start = today - timedelta(days=today.weekday())
-        start = this_week_start - timedelta(days=7)
-        end = this_week_start - timedelta(days=1)
-
-    elif preset == "This Month":
-        start = today.replace(day=1)
-        end = today
-
-    elif preset == "Last Month":
-        this_month_start = today.replace(day=1)
-        last_month_end = this_month_start - timedelta(days=1)
-        start = last_month_end.replace(day=1)
-        end = last_month_end
-
-    elif preset == "This Year":
-        start = today.replace(month=1, day=1)
-        end = today
-
-    elif preset == "Last Year":
-        start = date(today.year - 1, 1, 1)
-        end = date(today.year - 1, 12, 31)
-
-    elif preset == "All Time":
-        start = min_date
-        end = max_date
-
-    else:
-        start = max(today - timedelta(weeks=12), min_date)
-        end = max_date
-
-    start = max(start, min_date)
-    end = min(end, max_date)
-    return start, end
-
-
-st.sidebar.title("HCZ Dashboard Filters")
-
-date_preset = st.sidebar.selectbox(
-    "Date range preset",
-    [
-        "Last 12 Weeks",
-        "This Week",
-        "Last Week",
-        "This Month",
-        "Last Month",
-        "This Year",
-        "Last Year",
-        "All Time",
-        "Custom",
-    ],
-    index=0,
-)
-
-preset_start, preset_end = get_date_preset_range(date_preset, min_date, max_date)
-
-if date_preset == "Custom":
-    date_range = st.sidebar.date_input(
-        "Custom date range",
-        value=(preset_start, preset_end),
-        min_value=min_date,
-        max_value=max_date,
-    )
-
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        selected_start, selected_end = date_range
-    else:
-        selected_start, selected_end = preset_start, preset_end
-else:
-    selected_start, selected_end = preset_start, preset_end
-    st.sidebar.caption(f"{selected_start:%b %d, %Y} – {selected_end:%b %d, %Y}")
 
 
 # -----------------------------
@@ -405,6 +323,8 @@ campaign_df, ga4_df, lp_df, data_quality_df = load_data()
 # -----------------------------
 # Sidebar filters
 # -----------------------------
+from datetime import date, timedelta
+
 min_date = min(
     campaign_df["date"].min() if "date" in campaign_df.columns and not campaign_df.empty else pd.Timestamp.today(),
     ga4_df["date"].min() if "date" in ga4_df.columns and not ga4_df.empty else pd.Timestamp.today(),
@@ -417,20 +337,89 @@ max_date = max(
     lp_df["week_start"].max() if "week_start" in lp_df.columns and not lp_df.empty else pd.Timestamp.today(),
 ).date()
 
-default_start = max_date - pd.Timedelta(weeks=12)
+
+def get_date_preset_range(preset: str, min_date: date, max_date: date) -> tuple[date, date]:
+    today = max_date
+
+    if preset == "Last 12 Weeks":
+        start = today - timedelta(weeks=12)
+        end = today
+    elif preset == "This Week":
+        start = today - timedelta(days=today.weekday())  # Monday
+        end = today
+    elif preset == "Last Week":
+        this_week_start = today - timedelta(days=today.weekday())
+        start = this_week_start - timedelta(days=7)
+        end = this_week_start - timedelta(days=1)
+    elif preset == "This Month":
+        start = today.replace(day=1)
+        end = today
+    elif preset == "Last Month":
+        this_month_start = today.replace(day=1)
+        last_month_end = this_month_start - timedelta(days=1)
+        start = last_month_end.replace(day=1)
+        end = last_month_end
+    elif preset == "This Year":
+        start = date(today.year, 1, 1)
+        end = today
+    elif preset == "Last Year":
+        start = date(today.year - 1, 1, 1)
+        end = date(today.year - 1, 12, 31)
+    elif preset == "All Time":
+        start = min_date
+        end = max_date
+    else:
+        start = max(today - timedelta(weeks=12), min_date)
+        end = max_date
+
+    start = max(start, min_date)
+    end = min(end, max_date)
+    return start, end
+
+
+default_start = max_date - timedelta(weeks=12)
 default_start = max(default_start, min_date)
 
 st.sidebar.title("HCZ Dashboard Filters")
+
+preset_options = [
+    "Last 12 Weeks",
+    "This Week",
+    "Last Week",
+    "This Month",
+    "Last Month",
+    "This Year",
+    "Last Year",
+    "All Time",
+]
+
+preset = st.sidebar.selectbox("Quick date range", preset_options, index=0)
+
+if "selected_start" not in st.session_state:
+    st.session_state.selected_start = default_start
+if "selected_end" not in st.session_state:
+    st.session_state.selected_end = max_date
+
+if st.sidebar.button("Apply preset"):
+    preset_start, preset_end = get_date_preset_range(preset, min_date, max_date)
+    st.session_state.selected_start = preset_start
+    st.session_state.selected_end = preset_end
+
 date_range = st.sidebar.date_input(
     "Date range",
-    value=(default_start, max_date),
+    value=(st.session_state.selected_start, st.session_state.selected_end),
     min_value=min_date,
     max_value=max_date,
 )
+
 if isinstance(date_range, tuple) and len(date_range) == 2:
     selected_start, selected_end = date_range
 else:
-    selected_start, selected_end = default_start, max_date
+    selected_start, selected_end = st.session_state.selected_start, st.session_state.selected_end
+
+# keep session state synced if user manually changes the date picker
+st.session_state.selected_start = selected_start
+st.session_state.selected_end = selected_end
 
 agg_level = st.sidebar.radio("Aggregation", AGG_OPTIONS, index=0)
 objective = st.sidebar.selectbox("Objective", OBJECTIVE_OPTIONS, index=0)
@@ -450,7 +439,7 @@ selected_lp = st.sidebar.multiselect("Landing page", lp_values)
 device_values = sorted(lp_df["device"].dropna().unique().tolist()) if "device" in lp_df.columns else []
 selected_devices = st.sidebar.multiselect("Device", device_values)
 
-meta_df_all = campaign_df[campaign_df.get("platform", "") == "Meta"] if "platform" in campaign_df.columns else pd.DataFrame()
+meta_df_all = campaign_df[campaign_df["platform"] == "Meta"] if "platform" in campaign_df.columns else pd.DataFrame()
 meta_ad_values = sorted(meta_df_all["ad_name"].dropna().unique().tolist()) if "ad_name" in meta_df_all.columns else []
 selected_meta_ads = st.sidebar.multiselect("Meta ad name (optional)", meta_ad_values)
 
