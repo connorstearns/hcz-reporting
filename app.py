@@ -10,7 +10,7 @@ Single-file app with:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -232,9 +232,92 @@ def get_prior_period(df: pd.DataFrame, date_col: str, start_date: pd.Timestamp, 
     prior_start = prior_end - pd.Timedelta(days=days - 1)
     return df[df[date_col].between(prior_start, prior_end)]
 
+def get_date_preset_range(preset: str, min_date: date, max_date: date) -> tuple[date, date]:
+    today = max_date
+
+    if preset == "Last 12 Weeks":
+        start = today - timedelta(weeks=12)
+        end = today
+
+    elif preset == "This Week":
+        start = today - timedelta(days=today.weekday())   # Monday
+        end = today
+
+    elif preset == "Last Week":
+        this_week_start = today - timedelta(days=today.weekday())
+        start = this_week_start - timedelta(days=7)
+        end = this_week_start - timedelta(days=1)
+
+    elif preset == "This Month":
+        start = today.replace(day=1)
+        end = today
+
+    elif preset == "Last Month":
+        this_month_start = today.replace(day=1)
+        last_month_end = this_month_start - timedelta(days=1)
+        start = last_month_end.replace(day=1)
+        end = last_month_end
+
+    elif preset == "This Year":
+        start = today.replace(month=1, day=1)
+        end = today
+
+    elif preset == "Last Year":
+        start = date(today.year - 1, 1, 1)
+        end = date(today.year - 1, 12, 31)
+
+    elif preset == "All Time":
+        start = min_date
+        end = max_date
+
+    else:
+        start = max(today - timedelta(weeks=12), min_date)
+        end = max_date
+
+    start = max(start, min_date)
+    end = min(end, max_date)
+    return start, end
+
+
+st.sidebar.title("HCZ Dashboard Filters")
+
+date_preset = st.sidebar.selectbox(
+    "Date range preset",
+    [
+        "Last 12 Weeks",
+        "This Week",
+        "Last Week",
+        "This Month",
+        "Last Month",
+        "This Year",
+        "Last Year",
+        "All Time",
+        "Custom",
+    ],
+    index=0,
+)
+
+preset_start, preset_end = get_date_preset_range(date_preset, min_date, max_date)
+
+if date_preset == "Custom":
+    date_range = st.sidebar.date_input(
+        "Custom date range",
+        value=(preset_start, preset_end),
+        min_value=min_date,
+        max_value=max_date,
+    )
+
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        selected_start, selected_end = date_range
+    else:
+        selected_start, selected_end = preset_start, preset_end
+else:
+    selected_start, selected_end = preset_start, preset_end
+    st.sidebar.caption(f"{selected_start:%b %d, %Y} – {selected_end:%b %d, %Y}")
+
 
 # -----------------------------
-# Data loading (placeholders + mock)
+# Data loading
 # -----------------------------
 SPREADSHEET_ID = "1VRGGDN934VPrY-sX55fkPySZ9TKHccqqxGUScpwbWDU"
 GID_CAMPAIGN = "0"
