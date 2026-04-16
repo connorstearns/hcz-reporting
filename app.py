@@ -235,132 +235,50 @@ def get_prior_period(df: pd.DataFrame, date_col: str, start_date: pd.Timestamp, 
 # -----------------------------
 # Data loading (placeholders + mock)
 # -----------------------------
-def load_from_google_sheets_placeholder() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Replace this with real Google Sheets loading logic.
-
-    Example implementation options:
-    - gspread + service account in st.secrets
-    - googleapiclient Sheets API
-    """
-    raise NotImplementedError("Google Sheets loader not configured. Using mock data fallback.")
+SPREADSHEET_ID = "1VRGGDN934VPrY-sX55fkPySZ9TKHccqqxGUScpwbWDU"
+GID_CAMPAIGN = "0"
+GID_GA4 = "1406121502"
+GID_LP = "924758410"
 
 
-def make_mock_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    rng = np.random.default_rng(42)
-    dates = pd.date_range(end=pd.Timestamp.today().normalize(), periods=210, freq="D")
+def google_sheet_csv_url(spreadsheet_id: str, gid: str) -> str:
+    return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={gid}"
 
-    platforms = ["Meta", "Google"]
-    objectives = ["Enrollment", "Recruitment"]
-    campaigns = {
-        "Enrollment": ["Enroll | Brand", "Enroll | Program Interest"],
-        "Recruitment": ["Recruit | Educators", "Recruit | Ops Roles"],
-    }
-    ad_topics = ["Community", "Impact", "Benefits", "Urgency"]
-    ad_names = ["Meta Ad A", "Meta Ad B", "Meta Ad C", "Meta Ad D"]
 
-    rows = []
-    for d in dates:
-        for obj in objectives:
-            for p in platforms:
-                for c in campaigns[obj]:
-                    cost = max(10, rng.normal(120 if p == "Meta" else 90, 25))
-                    impressions = max(100, int(rng.normal(15000 if p == "Meta" else 9000, 2500)))
-                    ctr = 0.012 if p == "Meta" else 0.045
-                    clicks = max(5, int(impressions * max(0.003, rng.normal(ctr, 0.004))))
-                    career_clicks = int(clicks * max(0.02, rng.normal(0.10, 0.03))) if obj == "Recruitment" else int(clicks * 0.03)
-                    applications = int(clicks * max(0.01, rng.normal(0.07, 0.02))) if obj == "Recruitment" else int(clicks * 0.01)
-                    enrollment_forms = int(clicks * max(0.01, rng.normal(0.06, 0.02))) if obj == "Enrollment" else int(clicks * 0.01)
-                    enrollment_apply_clicks = int(clicks * max(0.02, rng.normal(0.15, 0.04))) if obj == "Enrollment" else int(clicks * 0.02)
-                    rows.append(
-                        {
-                            "date": d,
-                            "platform": p,
-                            "campaign_name": c,
-                            "ad_name": rng.choice(ad_names) if p == "Meta" else "",
-                            "cost": float(cost),
-                            "impressions": impressions,
-                            "clicks": clicks,
-                            "career_clicks": career_clicks,
-                            "applications": applications,
-                            "enrollment_forms": enrollment_forms,
-                            "enrollment_apply_clicks": enrollment_apply_clicks,
-                            "ad_topic": rng.choice(ad_topics),
-                            "objective": obj,
-                            "month": d.month,
-                            "year": d.year,
-                        }
-                    )
-    campaign_df = pd.DataFrame(rows)
+def load_from_google_sheets() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    campaign_df = pd.read_csv(google_sheet_csv_url(SPREADSHEET_ID, GID_CAMPAIGN))
+    ga4_df = pd.read_csv(google_sheet_csv_url(SPREADSHEET_ID, GID_GA4))
+    lp_df = pd.read_csv(google_sheet_csv_url(SPREADSHEET_ID, GID_LP))
 
-    ga4_rows = []
-    for d in dates:
-        paid = int(max(30, rng.normal(600, 110)))
-        non_paid = int(max(20, rng.normal(850, 160)))
-        apps_sub = int(max(0, rng.normal(28, 8)))
-        ga4_rows.append(
-            {
-                "date": d,
-                "paid_traffic": paid,
-                "non_paid_traffic": non_paid,
-                "applications_submitted": apps_sub,
-                "career_clicks": int(max(0, rng.normal(42, 12))),
-                "enrollment_form_submits": int(max(0, rng.normal(35, 10))),
-                "month": d.month,
-                "year": d.year,
-            }
-        )
-    ga4_df = pd.DataFrame(ga4_rows)
-
-    lp_weeks = pd.date_range(end=pd.Timestamp.today().normalize(), periods=40, freq="W-MON")
-    landing_pages = ["/enroll", "/recruit", "/programs", "/careers"]
-    sources = ["google", "meta", "direct"]
-    mediums = ["cpc", "paid_social", "none"]
-    devices = ["desktop", "mobile", "tablet"]
-
-    lp_rows = []
-    for w in lp_weeks:
-        for lp in landing_pages:
-            for dev in devices:
-                sess = int(max(10, rng.normal(300, 80)))
-                engaged = int(sess * max(0.2, rng.normal(0.58, 0.1)))
-                views = int(sess * max(1.0, rng.normal(1.9, 0.3)))
-                lp_rows.append(
-                    {
-                        "week_start": w,
-                        "month": w.month,
-                        "landing_page": lp,
-                        "source": rng.choice(sources),
-                        "medium": rng.choice(mediums),
-                        "campaign": rng.choice(["Enroll | Brand", "Recruit | Educators", "Generic"]),
-                        "content": rng.choice(["headline_a", "headline_b", "cta_a"]),
-                        "term": rng.choice(["hcz", "jobs", "programs"]),
-                        "device": dev,
-                        "sessions": sess,
-                        "total_users": int(sess * max(0.7, rng.normal(0.85, 0.05))),
-                        "engaged_sessions": engaged,
-                        "views": views,
-                        "career_clicks": int(sess * max(0.01, rng.normal(0.09, 0.03))),
-                        "enrollment_form_submits": int(sess * max(0.01, rng.normal(0.07, 0.02))),
-                    }
-                )
-    lp_df = pd.DataFrame(lp_rows)
-
-    dq_df = pd.DataFrame(
+    data_quality_df = pd.DataFrame(
         [
-            {"source": SHEET_CAMPAIGN, "last_refresh": pd.Timestamp.today().normalize(), "row_count": len(campaign_df), "note": "mock"},
-            {"source": SHEET_GA4, "last_refresh": pd.Timestamp.today().normalize(), "row_count": len(ga4_df), "note": "mock"},
-            {"source": SHEET_LP, "last_refresh": pd.Timestamp.today().normalize(), "row_count": len(lp_df), "note": "mock"},
+            {
+                "source": SHEET_CAMPAIGN,
+                "last_refresh": pd.Timestamp.today().normalize(),
+                "row_count": len(campaign_df),
+                "note": "live google sheet",
+            },
+            {
+                "source": SHEET_GA4,
+                "last_refresh": pd.Timestamp.today().normalize(),
+                "row_count": len(ga4_df),
+                "note": "live google sheet",
+            },
+            {
+                "source": SHEET_LP,
+                "last_refresh": pd.Timestamp.today().normalize(),
+                "row_count": len(lp_df),
+                "note": "live google sheet",
+            },
         ]
     )
-    return campaign_df, ga4_df, lp_df, dq_df
+
+    return campaign_df, ga4_df, lp_df, data_quality_df
 
 
 @st.cache_data(show_spinner=False)
 def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    try:
-        campaign_df, ga4_df, lp_df, data_quality_df = load_from_google_sheets_placeholder()
-    except Exception:
-        campaign_df, ga4_df, lp_df, data_quality_df = make_mock_data()
+    campaign_df, ga4_df, lp_df, data_quality_df = load_from_google_sheets()
 
     campaign_df = normalize_columns(campaign_df)
     ga4_df = normalize_columns(ga4_df)
@@ -385,6 +303,7 @@ def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
     for cat_col in ["platform", "campaign_name", "ad_name", "ad_topic", "objective"]:
         if cat_col in campaign_df.columns:
             campaign_df[cat_col] = campaign_df[cat_col].fillna("Unknown")
+
     for cat_col in ["landing_page", "source", "medium", "campaign", "device"]:
         if cat_col in lp_df.columns:
             lp_df[cat_col] = lp_df[cat_col].fillna("Unknown")
@@ -393,7 +312,6 @@ def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
 
 
 campaign_df, ga4_df, lp_df, data_quality_df = load_data()
-
 
 # -----------------------------
 # Sidebar filters
