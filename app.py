@@ -11,13 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-if isinstance(default_end, datetime):
-    default_end = default_end.date()
-if isinstance(max_date, datetime):
-    max_date = max_date.date()
-
-default_end = min(default_end, max_date)
-from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
